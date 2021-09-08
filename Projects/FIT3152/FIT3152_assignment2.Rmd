@@ -160,7 +160,7 @@ randauc = performance(randpred, "auc")
 
 ```
 
-## Including Plots
+## Result
 
 ```{r plot, echo=FALSE}
 # ROC Plot 
