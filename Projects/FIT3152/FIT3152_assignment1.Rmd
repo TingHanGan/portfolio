@@ -1,0 +1,124 @@
+---
+title: "Analysing Online Forums"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Task
+
+**The data that is contained in the file consists of metadata and linguistic analysis of posts over the years 2002 to 2011. Working with 20,000 posts randomly selected from the original file, the task was to:**\
+*- Analyse activity and language on the forum over time*\
+*- Analyse the language used by groups*\
+*- Identify social networks online*\doublespacing
+
+**This was done through cleaning the dataset and then creating multiple graphs to visualise the results and performing null hypothesis tests to further prove the information found.**\
+Full report can be found on my github (private): <https://github.com/TingHanGan/FIT3152_Assignment1>.
+
+
+```{r code, echo=FALSE}
+rm(list = ls())
+set.seed(30583349)
+webforum <- read.csv("webforum.csv")
+webforum <- webforum[sample(nrow(webforum), 20000),]
+webforum = webforum[webforum$AuthorID!=-1,]
+
+library(igraph)
+library(igraphdata)
+webforumSN = webforum[,c(1:3)]
+webforumSN$Date = format(as.Date(webforumSN$Date), "%Y/%m")
+networks = webforumSN[webforumSN$Date == "2002/02",]
+networks = networks[order(networks$ThreadID),]
+networks = networks[,c(1:2)]
+networks = unique(networks)
+period = "2002/02"
+
+social.graph <- function(id, nodes){
+  # creates a two-way directed network 
+  nodes$weight = 1
+  graphdata <- data.frame(
+    from = nodes$from,
+    to = nodes$to,
+    weight = nodes$weight
+  )
+  graphdata = unique(graphdata)
+  g <- graph.data.frame(graphdata, directed=FALSE)
+  return(g)
+}
+
+social.network <- function(data, id){
+  retval = list()
+  retval$from = c()
+  retval$to = c()
+  retval$weight = c()
+  thread = networks[networks$ThreadID == id,]
+  count = nrow(networks[networks$ThreadID == id,])
+  
+  # creates the connections from the first author to every other author
+  for(i in 1:count){
+    retval$from = append(retval$from, thread[1,2])
+    retval$to = append(retval$to, thread[i,2])
+    retval$weight = append(retval$weight, 1)      
+  }
+  # loops through each other author to connect every possible author together 
+  total_count = length(retval$to)
+  for(j in 1:total_count){
+    if(is.element(retval$to[j], retval$from) == FALSE){
+      for(k in j:total_count){
+        retval$from = append(retval$from, thread[j,2])
+        retval$to = append(retval$to, thread[k,2]) 
+        }
+      }
+  }
+  # finds the duplicate connections 
+  retval$duplicate_lst = c()
+  for(l in 1:length(retval$to)){
+    if(retval$to[l] == retval$from[l]){
+      retval$duplicate_lst = append(retval$duplicate_lst, l)
+    }
+  }
+  # removes the duplicate connections 
+  retval$from = retval$from[-retval$duplicate_lst]
+  retval$to = retval$to[-retval$duplicate_lst]
+  return(retval)
+  }
+
+extend.network <- function(nodes, ThreadID, AuthorID){
+  # extends the network for a given AuthorID 
+  # that has communicated in a ThreadID
+  # i.e., extend the current network that the given AuthorID has not communicated in before
+  otherThread = networks[networks$AuthorID == AuthorID,]
+  otherThread = otherThread[otherThread$ThreadID != ThreadID,]
+  noOfThreads = nrow(otherThread)
+  for(i in 1:noOfThreads){
+    temp = social.network(networks, otherThread[i,1])
+    nodes$from = append(nodes$from, temp$from)
+    nodes$to = append(nodes$to, temp$to)
+  }
+  return(nodes)
+}
+
+network.month <- function(thread){
+  # thread is the first thread to analayse, containing all author
+  # participants within the thread 
+  retval = list()
+  retval$ThreadID = thread
+  authors = unique(networks[networks$ThreadID == thread,]$AuthorID)
+  retval$nodes = social.network(networks, thread)
+  for(i in 1:length(authors)){
+    retval$nodes = extend.network(retval$nodes, thread, authors[i])
+  retval$g = social.graph(retval$ThreadID, retval$nodes)
+  }
+  return(retval)
+}
+```
+
+## Example social network
+
+```{r plot, echo=FALSE}
+monthly_network = network.month(10633)
+plot(monthly_network$g, vertex.color="salmon")
+title("Social network for ThreadID.10633 within the period 2002/02")
+```
